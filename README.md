@@ -141,6 +141,41 @@ Never stored anywhere persistent — not in memory, not in any tracked file.
 It only ever lived in `backend/.env`, which is gitignored. Check `git
 status` before your first push to confirm `.env` isn't staged.
 
+## Deploying to Vercel
+
+Because the backend (Express) and frontend (Vite) are genuinely different
+apps, this needs **two separate Vercel projects** pointing at this one repo
+— not one root config trying to glue both together (that pattern is
+deprecated and fragile in practice). Each app has its own `vercel.json`:
+
+- `backend/vercel.json` — sets `framework: "express"` explicitly and
+  `maxDuration: 60` on `src/server.ts`. The default function timeout is too
+  short for `/api/chat/stream`: a real request can involve multiple tool
+  calls plus multiple round trips to NVIDIA before it finishes streaming.
+  60s is a starting point, not a guarantee — raise it further if your plan
+  allows and agent turns are timing out.
+- `frontend/vercel.json` — explicit `framework: "vite"` and output
+  directory; Vite is auto-detected anyway, but being explicit here means a
+  future change to the repo structure can't silently break detection.
+
+### Setup (once, in the Vercel dashboard or via `vercel link --repo`)
+
+1. Import this repo twice as two separate Vercel projects.
+2. Project 1 ("nova-backend"): set **Root Directory** to `backend`.
+3. Project 2 ("nova-frontend"): set **Root Directory** to `frontend`.
+4. Add environment variables in each project's dashboard (never in
+   `vercel.json` — it's a committed file):
+   - Backend: `NVIDIA_API_KEY`, `NVIDIA_MODEL`, `NVIDIA_EMBEDDING_MODEL`,
+     `SUPABASE_URL`, `SUPABASE_ANON_KEY`
+   - Frontend: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`
+5. In the frontend project, point API calls at the backend's deployed URL
+   (the current `vite.config.ts` dev proxy only works for local dev —
+   you'll want an env-driven base URL or a Vercel rewrite from the frontend
+   project to the backend project's domain for production).
+
+That last point is a real gap, not yet wired up — flagging it rather than
+letting `vercel.json` alone imply the deploy is one command away.
+
 ## Suggested next session
 
 Pick one: (a) background task worker so tasks actually run without a held-
